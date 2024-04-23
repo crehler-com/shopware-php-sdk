@@ -26,7 +26,7 @@ class Client implements ClientInterface
 
     private GuzzleClientInterface $guzzleClient;
 
-    private function __construct(GuzzleClientInterface $guzzleClient)
+    public function __construct(GuzzleClientInterface $guzzleClient)
     {
         $this->guzzleClient = $guzzleClient;
     }
