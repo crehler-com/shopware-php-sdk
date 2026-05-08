@@ -178,17 +178,19 @@ class EntityHydrator implements HydratorInterface
         $relationships = $extension['relationships'] ?? [];
 
         foreach ($relationships as $property => $relationship) {
-            if (!$entitySchema->properties->has($property)) {
-                continue;
-            }
+            $field = $entitySchema->properties->has($property)
+                ? $entitySchema->properties->get($property)
+                : null;
 
-            $field = $entitySchema->properties->get($property);
+            // For third-party extensions (e.g. Swag Commercial b2b_order_employee)
+            // the property is not declared in the parent entity schema. Fall back to
+            // the JSON:API shape of `data`: indexed array of {type,id} = ToMany,
+            // single {type,id} object = ToOne.
+            $isToMany = $field !== null
+                ? $field->isToManyAssociation()
+                : isset($relationship['data'][0]['type']);
 
-            if ($field === null) {
-                continue;
-            }
-
-            if ($field->isToManyAssociation()) {
+            if ($isToMany) {
                 $type = !empty($relationship['data'][0]['type']) ? $relationship['data'][0]['type'] : null;
                 if ($type) {
                     $repository = RepositoryFactory::create($type);
@@ -200,7 +202,11 @@ class EntityHydrator implements HydratorInterface
                 continue;
             }
 
-            if ($field->isToOneAssociation() && array_key_exists('data', $relationship) && !empty($relationship['data'])) {
+            $isToOne = $field !== null
+                ? $field->isToOneAssociation()
+                : (isset($relationship['data']['type']) && isset($relationship['data']['id']));
+
+            if ($isToOne && array_key_exists('data', $relationship) && !empty($relationship['data'])) {
                 $nestedEntity = $this->hydrateToOne($relationship, $data, $context);
 
                 if ($nestedEntity) {
