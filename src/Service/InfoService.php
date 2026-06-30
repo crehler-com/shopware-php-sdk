@@ -2,6 +2,7 @@
 
 namespace Vin\ShopwareSdk\Service;
 
+use Symfony\Component\Cache\Adapter\ArrayAdapter;
 use Vin\ShopwareSdk\Data\Schema\Schema;
 use Vin\ShopwareSdk\Data\Schema\SchemaCollection;
 
@@ -23,7 +24,7 @@ class InfoService extends ApiService
 
     private ?SchemaCollection $schema = null;
 
-    private array $cache = [];
+    private ArrayAdapter $cache;
 
     public function getInfo(): ApiResponse
     {
@@ -62,8 +63,11 @@ class InfoService extends ApiService
 
     public function getSchema(string $entity): ?Schema
     {
-        if (array_key_exists($entity, $this->cache)) {
-            return $this->cache[$entity];
+        $this->cache ??= new ArrayAdapter(maxItems: 200);
+        $cacheItem = $this->cache->getItem($entity);
+
+        if ($cacheItem->isHit()) {
+            return $cacheItem->get();
         }
 
         if ($this->schema !== null) {
@@ -75,12 +79,19 @@ class InfoService extends ApiService
 
         $this->schema = $localSchema === false ? $this->refreshSchema() : $this->parseSchema(self::handleResponse($localSchema, ['content-type' => 'application/vnd.api+json']));
 
-        return $this->cache[$entity] = $this->schema->get($entity);
+        $schema = $this->schema->get($entity);
+
+        $cacheItem->set($schema);
+        $this->cache->save($cacheItem);
+
+        return $schema;
     }
 
     public function refreshSchema(bool $persist = true): SchemaCollection
     {
-        $this->cache = [];
+        $this->cache ??= new ArrayAdapter(maxItems: 200);
+
+        $this->cache->clear();
         $this->schema = null;
 
         $rawSchema = $this->fetchRawSchema();

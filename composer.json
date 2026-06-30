@@ -15,7 +15,8 @@
         "php": "^7.4 || ^8.0 || ^8.1",
         "ext-json": "*",
         "guzzlehttp/guzzle": "^7.0",
-        "psr/http-client": "^1.0"
+        "psr/http-client": "^1.0",
+        "symfony/cache": "^5.4 || ^6.0 || ^7.0"
     },
     "require-dev": {
         "phpunit/phpunit": "*",
