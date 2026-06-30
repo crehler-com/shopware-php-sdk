@@ -4,6 +4,7 @@ namespace Vin\ShopwareSdk\Hydrate;
 
 use Exception;
 use Symfony\Component\Cache\Adapter\ArrayAdapter;
+use Symfony\Contracts\Service\ResetInterface;
 use Vin\ShopwareSdk\Data\Context;
 use Vin\ShopwareSdk\Data\Entity\Custom\CustomDefinition;
 use Vin\ShopwareSdk\Data\Entity\Entity;
@@ -13,7 +14,7 @@ use Vin\ShopwareSdk\Data\Schema\Schema;
 use Vin\ShopwareSdk\Factory\RepositoryFactory;
 use Vin\ShopwareSdk\Service\InfoService;
 
-class EntityHydrator implements HydratorInterface
+class EntityHydrator implements HydratorInterface, ResetInterface
 {
     // using cache is recommended if you want to use circular references
     protected bool $useCache;
@@ -28,6 +29,11 @@ class EntityHydrator implements HydratorInterface
         $this->useCache = $useCache;
         $this->cacheSchema = new ArrayAdapter(maxItems: 200);
         $this->cache = new ArrayAdapter(maxItems: 2000);
+    }
+
+    public function reset(): void
+    {
+        $this->cache->clear();
     }
 
     public function schema(string $entity, Context $context): Schema
