@@ -3,6 +3,8 @@
 namespace Vin\ShopwareSdk\Hydrate;
 
 use Exception;
+use Symfony\Component\Cache\Adapter\ArrayAdapter;
+use Symfony\Contracts\Service\ResetInterface;
 use Vin\ShopwareSdk\Data\Context;
 use Vin\ShopwareSdk\Data\Entity\Custom\CustomDefinition;
 use Vin\ShopwareSdk\Data\Entity\Entity;
@@ -12,26 +14,32 @@ use Vin\ShopwareSdk\Data\Schema\Schema;
 use Vin\ShopwareSdk\Factory\RepositoryFactory;
 use Vin\ShopwareSdk\Service\InfoService;
 
-class EntityHydrator implements HydratorInterface
+class EntityHydrator implements HydratorInterface, ResetInterface
 {
     // using cache is recommended if you want to use circular references
     protected bool $useCache;
 
-    protected array $cache = [];
+    protected ArrayAdapter $cache;
 
-    protected array $cacheSchema = [];
+    protected ArrayAdapter $cacheSchema;
 
     public function __construct(
         bool $useCache = false
-    )
-    {
+    ) {
         $this->useCache = $useCache;
+        $this->cacheSchema = new ArrayAdapter(maxItems: 200);
+        $this->cache = new ArrayAdapter(maxItems: 2000);
+    }
+
+    public function reset(): void
+    {
+        $this->cache->clear();
     }
 
     public function schema(string $entity, Context $context): Schema
     {
-        if (array_key_exists($entity, $this->cacheSchema)) {
-            return $this->cacheSchema[$entity];
+        if ($this->cacheSchema->hasItem($entity)) {
+            return $this->cacheSchema->getItem($entity)->get();
         }
 
         $infoService = new InfoService($context);
@@ -47,8 +55,11 @@ class EntityHydrator implements HydratorInterface
                 throw new Exception('Schema for entity: ' . $entity . ' not found');
             }
         }
-        
-        $this->cacheSchema[$entity] = $schema;
+
+        $item = $this->cacheSchema->getItem($entity);
+
+        $item->set($schema);
+        $this->cacheSchema->save($item);
 
         return $schema;
     }
@@ -95,11 +106,12 @@ class EntityHydrator implements HydratorInterface
 
     private function hydrateEntity(string $entityName, array $entityRaw, array $data, Context $context): Entity
     {
-        if($this->useCache) {
+        if ($this->useCache) {
             $cacheKey = $entityRaw['type'] . '-' . $entityRaw['id'];
+            $cacheItem = $this->cache->getItem($cacheKey);
 
-            if (array_key_exists($cacheKey, $this->cache)) {
-                return $this->cache[$cacheKey];
+            if ($cacheItem->isHit()) {
+                return $cacheItem->get();
             }
         }
 
@@ -121,8 +133,9 @@ class EntityHydrator implements HydratorInterface
         $relationships = $entityRaw['relationships'] ?? [];
 
         // reserve cache before relationships hydration. This prevents circular references to fail
-        if($this->useCache) {
-            $this->cache[$cacheKey] = $entity;
+        if ($this->useCache) {
+            $cacheItem->set($entity);
+            $this->cache->save($cacheItem);
         }
 
         return $this->hydrateRelationships($entity, $relationships, $entitySchema, $data, $context);
